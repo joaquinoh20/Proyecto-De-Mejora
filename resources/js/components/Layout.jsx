@@ -7,7 +7,6 @@ const MENU = [
   ['/estaciones', 'Estaciones', 'estaciones.ver'],
   ['/historial', 'Historial', 'historial.ver'],
   ['/pantallas', 'Pantallas', 'pantallas.ver'],
-  ['/proveedores', 'Proveedores', 'proveedores.ver'],
   ['/reportes', 'Reporte diario', 'reportes.ver'],
   ['/politicas', 'Políticas de seguridad', 'politicas.ver'],
   ['/usuarios', 'Usuarios', 'usuarios.gestionar'],

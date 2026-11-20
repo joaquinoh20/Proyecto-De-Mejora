@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import { useAuth } from '../auth.jsx';
+import AgregarMaquina from '../components/AgregarMaquina.jsx';
+import SincronizarEquipo from '../components/SincronizarEquipo.jsx';
 import { Cargando, Insignia, claseSeveridad, useApi, useAvisos } from '../ui.jsx';
 
 function Resumen() {
@@ -39,7 +42,10 @@ function Resumen() {
 export default function Dashboard() {
   const { datos: d, recargar } = useApi('/dashboard', { cada: 10000 });
   const { avisar } = useAvisos();
+  const { puede } = useAuth();
   const [ocupada, setOcupada] = useState(null);
+  const [agregando, setAgregando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(null);   // id de la máquina recién creada
 
   async function atender(id) {
     setOcupada(id);
@@ -54,6 +60,14 @@ export default function Dashboard() {
 
   return (
     <>
+      {puede('estaciones.editar') && (
+        <div className="fila-btn">
+          <button className="btn pri" type="button" onClick={() => setAgregando(true)}>Agregar máquina</button>
+          <Link className="btn" to="/estaciones">Ver todas las estaciones</Link>
+        </div>
+      )}
+      <AgregarMaquina abierto={agregando} onCerrar={() => setAgregando(false)} onCreada={(id) => { setAgregando(false); setSincronizando(id); recargar(true); }} />
+      <SincronizarEquipo id={sincronizando} onCerrar={() => { setSincronizando(null); recargar(true); }} />
       <Resumen />
       {!d ? <Cargando /> : (
         <>

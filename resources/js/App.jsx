@@ -12,7 +12,6 @@ import Historial from './pages/Historial.jsx';
 import Login from './pages/Login.jsx';
 import Pantallas from './pages/Pantallas.jsx';
 import Politicas from './pages/Politicas.jsx';
-import Proveedores from './pages/Proveedores.jsx';
 import Reportes from './pages/Reportes.jsx';
 import Usuarios from './pages/Usuarios.jsx';
 
@@ -43,7 +42,6 @@ export default function App() {
       <Route path="/estaciones/:id/editar" element={<Protegida permiso="estaciones.editar" titulo="Editar estación"><EstacionForm /></Protegida>} />
       <Route path="/historial" element={<Protegida permiso="historial.ver" titulo="Historial de movimientos"><Historial /></Protegida>} />
       <Route path="/pantallas" element={<Protegida permiso="pantallas.ver" titulo="Pantallas de las estaciones"><Pantallas /></Protegida>} />
-      <Route path="/proveedores" element={<Protegida permiso="proveedores.ver" titulo="Proveedores"><Proveedores /></Protegida>} />
       <Route path="/reportes" element={<Protegida permiso="reportes.ver" titulo="Reporte diario"><Reportes /></Protegida>} />
       <Route path="/politicas" element={<Protegida permiso="politicas.ver" titulo="Políticas de seguridad"><Politicas /></Protegida>} />
       <Route path="/usuarios" element={<Protegida permiso="usuarios.gestionar" titulo="Usuarios"><Usuarios /></Protegida>} />

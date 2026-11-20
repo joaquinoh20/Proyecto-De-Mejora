@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import SincronizarEquipo from '../components/SincronizarEquipo.jsx';
 import { Cargando, Dialogo, Grafico, Insignia, Medidor, etiquetaEstado, etiquetaNivel, fecha, soloFecha, useApi, useAvisos } from '../ui.jsx';
 
 const TIPOS = { procesador: 'Procesador', ram: 'Memoria RAM', disco: 'Disco', diadema: 'Diadema', mouse: 'Mouse', teclado: 'Teclado', monitor: 'Monitor', otro: 'Otro' };
@@ -150,6 +151,7 @@ export default function EstacionDetalle() {
   const [dlg, setDlg] = useState(null);          // 'agregar' | 'mant'
   const [cambiar, setCambiar] = useState(null);  // componente a retirar o intercambiar
   const [token, setToken] = useState(null);
+  const [sync, setSync] = useState(false);
 
   useEffect(() => { document.title = d ? `${d.estacion.codigo_activo} · AlfaVía Monitoreo` : 'Estación · AlfaVía Monitoreo'; }, [d]);
   useEffect(() => { setToken(null); }, [id]);
@@ -176,9 +178,11 @@ export default function EstacionDetalle() {
         <Link className="btn peq" to="/estaciones">← Estaciones</Link>
         <Link className="btn peq" to={`/historial?estacion=${id}`}>Historial de movimientos</Link>
         {puede('estaciones.editar') && <Link className="btn peq" to={`/estaciones/${id}/editar`}>Editar</Link>}
+        {puede('estaciones.editar') && <button className="btn peq pri" type="button" onClick={() => setSync(true)}>Sincronizar equipo</button>}
         {puede('pantallas.ver') && e.estado === 'en_linea' && <Link className="btn peq pri" to={`/pantallas?estacion=${id}`}>Ver pantalla</Link>}
       </div>
 
+      <SincronizarEquipo id={sync ? Number(id) : null} onCerrar={() => { setSync(false); recargar(true); }} />
       {token && (
         <section className="panel estrecho mt">
           <h2>Copia este token ahora</h2>

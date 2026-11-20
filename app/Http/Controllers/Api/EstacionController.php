@@ -6,9 +6,11 @@ namespace App\Http\Controllers\Api;
 use App\Servicios\Agente;
 use App\Servicios\Audit;
 use App\Servicios\Db;
+use App\Servicios\Operatividad;
 use App\Servicios\Politicas;
 use App\Servicios\Resumen;
 use Illuminate\Http\Request;
+use ZipArchive;
 
 /** Inventario de estaciones (características de cada computadora), ficha, edición, token del agente y telemetría. */
 final class EstacionController extends BaseApi
@@ -90,7 +92,7 @@ final class EstacionController extends BaseApi
     {
         return $this->ok([
             'ubicaciones' => Db::todos('SELECT id, nombre FROM ubicaciones ORDER BY id'),
-            'proveedores' => Db::todos("SELECT id, razon_social FROM proveedores WHERE activo AND tipo IN ('equipos','repuestos','servicios') ORDER BY razon_social"),
+            'proveedores' => Db::todos('SELECT id, razon_social FROM proveedores WHERE activo ORDER BY razon_social'),
         ]);
     }
 
@@ -120,6 +122,8 @@ final class EstacionController extends BaseApi
             'disco_tipo' => $i('disco_tipo', 5), 'disco_gb' => $i('disco_gb', 7), 'gpu' => $i('gpu', 80), 'so' => $i('so', 80),
         ];
         $modo = (string) $r->input('modo', 'operativa');
+        // El proveedor se escribe por su nombre: si ya existe se usa y, si no, se crea
+        $provNombre = limpio($r->input('proveedor_nombre', ''), 150);
 
         $errores = [];
         if (!preg_match('/^[A-Z0-9][A-Z0-9\-]{1,29}$/', $v['codigo_activo'])) { $errores[] = 'El código de activo solo admite letras, números y guiones (ej.: PC-026).'; }
@@ -137,6 +141,9 @@ final class EstacionController extends BaseApi
             return $this->fallo($errores[0], 422, ['errores' => $errores]);
         }
 
+        if ($r->has('proveedor_nombre')) {   // se resuelve después de validar, para no crear proveedores por un formulario con errores
+            $v['proveedor_id'] = $provNombre === '' ? null : $this->proveedorPorNombre($provNombre);
+        }
         $nul = static fn ($x) => ($x === '' || $x === null) ? null : $x;
         $int = static fn ($x) => ($x === '' || $x === null) ? null : (int) $x;
         $par = [
@@ -166,7 +173,7 @@ final class EstacionController extends BaseApi
     /** Datos para precargar el formulario de edición (sin el hash del token). */
     public function editar(Request $r, int $id)
     {
-        $e = Db::fila('SELECT * FROM estaciones WHERE id = :id', ['id' => $id]);
+        $e = Db::fila('SELECT e.*, pr.razon_social AS proveedor_nombre FROM estaciones e LEFT JOIN proveedores pr ON pr.id = e.proveedor_id WHERE e.id = :id', ['id' => $id]);
         if (!$e) {
             return $this->fallo('No existe esa estación.', 404);
         }
@@ -208,5 +215,91 @@ final class EstacionController extends BaseApi
     public function ia(Request $r, int $id)
     {
         return $this->ok(Resumen::paraEstacion($id));
+    }
+
+    /** Busca un proveedor por su nombre (sin distinguir mayúsculas) y, si no existe, lo crea. */
+    private function proveedorPorNombre(string $nombre): int
+    {
+        $id = Db::valor('SELECT id FROM proveedores WHERE lower(razon_social) = lower(:n) LIMIT 1', ['n' => $nombre]);
+        if ($id) {
+            return (int) $id;
+        }
+        $nuevo = (int) Db::valor("INSERT INTO proveedores (razon_social, tipo) VALUES (:n, 'equipos') RETURNING id", ['n' => $nombre]);
+        Audit::registrar('proveedor.crear', 'proveedor', $nuevo, ['razon_social' => $nombre, 'origen' => 'alta de estación']);
+        return $nuevo;
+    }
+
+    /** Estado de la sincronización: ¿ya reporta la PC?, última telemetría y operatividad. Se consulta cada pocos segundos. */
+    public function sync(Request $r, int $id)
+    {
+        $e = Db::fila('SELECT e.id, e.codigo_activo, e.nombre_host, e.estado, e.ultimo_latido, e.agente_token_hash, e.agente_token_creado, ub.nombre AS ubicacion, pr.razon_social AS proveedor
+                         FROM estaciones e JOIN ubicaciones ub ON ub.id = e.ubicacion_id LEFT JOIN proveedores pr ON pr.id = e.proveedor_id WHERE e.id = :id', ['id' => $id]);
+        if (!$e) {
+            return $this->fallo('No existe esa estación.', 404);
+        }
+        $ult = Db::fila('SELECT * FROM telemetria WHERE estacion_id = :id ORDER BY tomado_en DESC LIMIT 1', ['id' => $id]);
+        $pred = Db::fila('SELECT * FROM v_ultima_prediccion WHERE estacion_id = :id', ['id' => $id]);
+        $op = Operatividad::evaluar($e, $ult ?: null, $pred ?: null);
+        return $this->ok([
+            'estacion' => ['id' => (int) $e['id'], 'codigo' => $e['codigo_activo'], 'host' => $e['nombre_host'], 'piso' => $e['ubicacion'], 'proveedor' => $e['proveedor'],
+                           'estado' => $e['estado'], 'tiene_token' => $e['agente_token_hash'] !== null, 'hace_latido' => $e['ultimo_latido'] ? hace($e['ultimo_latido']) : null],
+            'conectado' => $op['conectado'],
+            'operatividad' => $op,
+            'ultima' => $ult ? ['cpu' => $ult['cpu_pct'], 'ram' => $ult['ram_pct'], 'temp' => $ult['temp_c'], 'salud' => $ult['disco_salud_pct'], 'hace' => hace($ult['tomado_en'])] : null,
+            'prediccion' => $pred ? ['prob' => round((float) $pred['prob_falla'] * 100), 'nivel' => $pred['nivel']] : null,
+            'servidor' => $r->getSchemeAndHttpHost(),
+        ]);
+    }
+
+    /**
+     * Paquete del agente ya configurado para esta PC (agent.py + config.json con su token + iniciar.bat).
+     * Genera un token nuevo: el que tuviera el agente anterior deja de funcionar. Se entrega en base64 dentro del JSON.
+     */
+    public function agente(Request $r, int $id)
+    {
+        $e = Db::fila('SELECT id, codigo_activo, nombre_host FROM estaciones WHERE id = :id AND activo', ['id' => $id]);
+        if (!$e) {
+            return $this->fallo('No existe esa estación.', 404);
+        }
+        $servidor = rtrim(trim((string) $r->input('servidor', '')), '/');
+        if ($servidor === '') {
+            $servidor = $r->getSchemeAndHttpHost();
+        }
+        if (!preg_match('#^https?://[A-Za-z0-9.\-]+(:\d{1,5})?$#', $servidor)) {
+            return $this->fallo('La dirección del servidor no es válida. Ejemplo: http://192.168.1.20:8000');
+        }
+        $carpeta = base_path('agent');
+        if (!is_file("$carpeta/agent.py")) {
+            return $this->fallo('No se encontró la carpeta «agent» en el servidor.', 500);
+        }
+        $token = Agente::generarToken((int) $e['id']);
+        Audit::registrar('agente.paquete', 'estacion', $e['id'], ['codigo' => $e['codigo_activo'], 'servidor' => $servidor]);
+
+        $tmp = tempnam(sys_get_temp_dir(), 'agt');
+        $zip = new ZipArchive();
+        $zip->open($tmp, ZipArchive::OVERWRITE);
+        $zip->addFile("$carpeta/agent.py", 'agent.py');
+        if (is_file("$carpeta/requirements.txt")) {
+            $zip->addFile("$carpeta/requirements.txt", 'requirements.txt');
+        }
+        $zip->addFromString('config.json', json_encode(['servidor' => $servidor, 'token' => $token, 'intervalo_seg' => 30], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        $zip->addFromString('iniciar.bat', "@echo off\r\ncd /d \"%~dp0\"\r\necho Instalando librerias (solo la primera vez)...\r\npy -m pip install -r requirements.txt\r\necho Conectando con " . $servidor . " ...\r\npy agent.py --config config.json\r\npause\r\n");
+        $zip->addFromString('LEEME.txt', "AlfaVia - Agente de monitoreo para " . $e['codigo_activo'] . " (" . $e['nombre_host'] . ")\r\n\r\n"
+            . "1. Instala Python 3.10 o superior (marca 'Add python.exe to PATH').\r\n2. Haz doble clic en iniciar.bat.\r\n"
+            . "3. En el sistema web veras la estacion pasar a 'Conectado'.\r\n\r\nNo compartas config.json: contiene el token de esta PC.\r\n");
+        $zip->close();
+        $bytes = (string) file_get_contents($tmp);
+        @unlink($tmp);
+        return $this->ok(['nombre' => 'agente-' . strtolower($e['codigo_activo']) . '.zip', 'base64' => base64_encode($bytes), 'servidor' => $servidor, 'codigo' => $e['codigo_activo']]);
+    }
+
+    /** Diagnóstico y operatividad redactados por Gemini (con texto local si no se puede usar). */
+    public function diagnostico(Request $r, int $id)
+    {
+        if (!Db::valor('SELECT 1 FROM estaciones WHERE id = :id', ['id' => $id])) {
+            return $this->fallo('No existe esa estación.', 404);
+        }
+        Audit::registrar('estacion.diagnostico', 'estacion', $id);
+        return $this->ok(Resumen::diagnosticoVivo($id));
     }
 }

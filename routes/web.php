@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\MantenimientoController;
 use App\Http\Controllers\Api\PanelController;
 use App\Http\Controllers\Api\PantallaController;
 use App\Http\Controllers\Api\PoliticaController;
-use App\Http\Controllers\Api\ProveedorController;
 use App\Http\Controllers\Api\ReporteController;
 use App\Http\Controllers\Api\SesionController;
 use App\Http\Controllers\Api\UsuarioController;
@@ -41,6 +40,8 @@ Route::prefix('app-api')->group(function () {
         Route::get('estaciones/{id}', [EstacionController::class, 'show']);
         Route::get('estaciones/{id}/telemetria', [EstacionController::class, 'telemetria']);
         Route::get('estaciones/{id}/ia', [EstacionController::class, 'ia']);
+        Route::get('estaciones/{id}/sync', [EstacionController::class, 'sync']);
+        Route::post('estaciones/{id}/diagnostico', [EstacionController::class, 'diagnostico'])->middleware('throttle:12,1');
     });
     Route::middleware('alfavia:estaciones.editar')->group(function () {
         Route::get('formulario-estacion', [EstacionController::class, 'formulario']);
@@ -48,6 +49,7 @@ Route::prefix('app-api')->group(function () {
         Route::post('estaciones', [EstacionController::class, 'store']);
         Route::put('estaciones/{id}', [EstacionController::class, 'update']);
         Route::post('estaciones/{id}/token', [EstacionController::class, 'token']);
+        Route::post('estaciones/{id}/agente', [EstacionController::class, 'agente']);
     });
     Route::post('estaciones/{id}/componentes', [ComponenteController::class, 'accion'])->middleware('alfavia:componentes.editar');
     Route::post('estaciones/{id}/mantenimientos', [MantenimientoController::class, 'store'])->middleware('alfavia:mantenimiento.registrar');
@@ -61,11 +63,6 @@ Route::prefix('app-api')->group(function () {
         Route::get('pantallas/{id}/frame', [PantallaController::class, 'frame']);
     });
 
-    Route::get('proveedores', [ProveedorController::class, 'index'])->middleware('alfavia:proveedores.ver');
-    Route::middleware('alfavia:proveedores.editar')->group(function () {
-        Route::post('proveedores', [ProveedorController::class, 'guardar']);
-        Route::post('proveedores/{id}/estado', [ProveedorController::class, 'estado']);
-    });
 
     Route::get('politicas', [PoliticaController::class, 'index'])->middleware('alfavia:politicas.ver');
     Route::post('politicas', [PoliticaController::class, 'guardar'])->middleware('alfavia:politicas.editar');
@@ -80,6 +77,7 @@ Route::prefix('app-api')->group(function () {
 
     Route::get('auditoria', [AuditoriaController::class, 'index'])->middleware('alfavia:auditoria.ver');
     Route::get('reporte', [ReporteController::class, 'diario'])->middleware('alfavia:reportes.ver');
+    Route::get('reporte/historial', [ReporteController::class, 'historial'])->middleware('alfavia:reportes.ver');
 });
 
 // Todo lo demás lo resuelve React (react-router): se devuelve la misma página.
