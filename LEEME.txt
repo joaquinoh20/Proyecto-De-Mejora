@@ -1,0 +1,2 @@
+PARCHE · DATOS REALES + RENDIMIENTO EN VIVO
+Contenido: agent\agent.py (agente real), app\...\RendimientoController.php, routes\*, resources\js\* , database\sql\06_datos_reales.sql

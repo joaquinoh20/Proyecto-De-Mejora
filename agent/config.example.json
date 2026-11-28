@@ -1,0 +1,5 @@
+{
+  "servidor": "http://127.0.0.1:8080",
+  "token": "PEGA-AQUI-EL-TOKEN-DE-LA-ESTACION",
+  "intervalo_seg": 30
+}

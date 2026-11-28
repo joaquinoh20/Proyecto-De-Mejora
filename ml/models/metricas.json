@@ -1,0 +1,39 @@
+{
+  "version": "gb-20261106-1604",
+  "entrenado_en": "2026-11-06T16:04:58",
+  "muestras": 1875,
+  "muestras_positivas": 91,
+  "fallas_registradas": 13,
+  "ventana_dias": 7,
+  "auc_validacion": 0.814,
+  "precision_promedio": 0.372,
+  "tasa_base": 0.049,
+  "variables": [
+    "cpu_prom",
+    "cpu_p95",
+    "ram_prom",
+    "ram_max",
+    "temp_prom",
+    "temp_max",
+    "disco_usado_max",
+    "disco_salud_min",
+    "desconexiones_7d",
+    "dispositivos_7d",
+    "edad_meses",
+    "cambios_90d"
+  ],
+  "importancias": {
+    "cpu_prom": 0.029,
+    "cpu_p95": 0.0155,
+    "ram_prom": 0.0518,
+    "ram_max": 0.0375,
+    "temp_prom": 0.1738,
+    "temp_max": 0.0596,
+    "disco_usado_max": 0.0632,
+    "disco_salud_min": 0.4866,
+    "desconexiones_7d": 0.0188,
+    "dispositivos_7d": 0.0,
+    "edad_meses": 0.0439,
+    "cambios_90d": 0.0203
+  }
+}
